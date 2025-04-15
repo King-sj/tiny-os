@@ -1,1 +1,4 @@
 *.bin
+*.img
+build/
+*.o

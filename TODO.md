@@ -1,0 +1,1 @@
+- 解决 img 不能被 macos parallels desktop 正确识别的问题
