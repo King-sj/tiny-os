@@ -21,7 +21,7 @@ DispStr:
     mov dl,0 ; 颜色
     int 10h ; 调用 BIOS 中断
     ret
-BootMessage: db "welcome !"
+BootMessage: db "welcome tiny-os!"
 times 510-($-$$) db 0 ; 填充剩下的字节，使得文件大小为 512 字节
                       ; 另外的 2 字节是引导扇区的结束标志
 dw 0xaa55 ; 结束标志
