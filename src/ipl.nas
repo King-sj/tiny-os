@@ -1,27 +1,122 @@
-; tiny os
-;%define __BOOT_DEBUG__ ; 做Boot sector 时一定要注释掉
-                        ; 将此行打开后用 nasm boot.asm -o boot.com 做成一个.com 文件 易于调试
-%ifdef __BOOT_DEBUG__
-  org 0100h ; 调试状态，做成 .com 文件
-%else
-  org 07c00h ; Boot 状态，Bios 加载到内存的 0:0x7c00 处
-%endif
-mov ax, cs ; 将当前段寄存器的值存入 ax
-mov ds, ax ; 将 ds 寄存器指向当前段
-mov es, ax ; 将 es 寄存器指向当前段
-call DispStr ; 显示字符串
-jmp $ ; 无限循环
+; Tiny OS IPL (Initial Program Loader)
+; Based on 30dayMakeOS 03_day
+; TAB=4
 
-DispStr:
-    mov ax, BootMessage ; 将字符串地址存入 ax
-    mov bp, ax ; es:bp
-    mov cx, 16 ; 字符串长度
-    mov ax, 01301h ; ah=0x13, al=0x01
-    mov bx, 000ch ; 颜色
-    mov dl,0 ; 颜色
-    int 10h ; 调用 BIOS 中断
-    ret
-BootMessage: db "welcome tiny-os!"
-times 510-($-$$) db 0 ; 填充剩下的字节，使得文件大小为 512 字节
-                      ; 另外的 2 字节是引导扇区的结束标志
-dw 0xaa55 ; 结束标志
+CYLS	EQU		1				; 柱面数
+
+		ORG		0x7c00			; 程序装载地址
+
+; 标准FAT12格式软盘引导扇区
+		JMP		entry
+		DB		0x90
+		DB		"TINYOS  "		; 启动扇区名称（8字节）
+		DW		512				; 扇区大小（512字节）
+		DB		1				; 簇大小（1个扇区）
+		DW		1				; FAT起始位置
+		DB		2				; FAT个数
+		DW		224				; 根目录大小
+		DW		2880			; 磁盘大小（2880扇区）
+		DB		0xf0			; 磁盘类型
+		DW		9				; FAT长度
+		DW		18				; 每磁道扇区数
+		DW		2				; 磁头数
+		DD		0				; 分区偏移
+		DD		2880			; 磁盘大小
+		DB		0,0,0x29		; 固定值
+		DD		0xffffffff		; 卷序列号
+		DB		"TINY-OS    "	; 卷标（11字节）
+		DB		"FAT12   "		; 文件系统类型（8字节）
+		RESB	18				; 保留18字节
+
+entry:
+		MOV		AX,0			; 初始化寄存器
+		MOV		SS,AX
+		MOV		SP,0x7c00
+		MOV		DS,AX
+
+; 显示启动消息
+		MOV		SI,msg_start
+		CALL	putstr
+
+; 读取磁盘数据到内存
+		MOV		AX,0x0820		; 读取到0x8200地址
+		MOV		ES,AX
+		MOV		CH,0			; 柱面0
+		MOV		DH,0			; 磁头0
+		MOV		CL,2			; 从扇区2开始读取
+
+readloop:
+		MOV		SI,0			; 失败计数器
+
+retry:
+		MOV		AH,0x02			; 读磁盘功能
+		MOV		AL,1			; 读1个扇区
+		MOV		BX,0
+		MOV		DL,0x00			; A驱动器
+		INT		0x13			; 调用BIOS磁盘服务
+		JNC		next			; 成功则继续
+		ADD		SI,1			; 失败次数+1
+		CMP		SI,5			; 重试5次
+		JAE		error			; 失败则报错
+		MOV		AH,0x00			; 重置磁盘
+		MOV		DL,0x00
+		INT		0x13
+		JMP		retry
+
+next:
+		MOV		AX,ES
+		ADD		AX,0x0020		; 指向下一个扇区位置
+		MOV		ES,AX
+		ADD		CL,1			; 扇区号+1
+		CMP		CL,4			; 读取3个扇区就够了（包含system.bin）
+		JBE		readloop
+
+; 读取完成，跳转到第二阶段
+		MOV		SI,msg_jump
+		CALL	putstr
+		JMP		0x8200			; 跳转到asmhead.nas（被加载到0x8200）
+
+error:
+		MOV		SI,msg_error
+
+putstr:
+		MOV		AL,[SI]
+		ADD		SI,1
+		CMP		AL,0
+		JE		putstr_end
+		MOV		AH,0x0e			; 显示字符
+		MOV		BX,15			; 字符颜色
+		INT		0x10			; 调用BIOS显示服务
+		JMP		putstr
+putstr_end:
+		RET
+
+putloop:
+		MOV		AL,[SI]
+		ADD		SI,1
+		CMP		AL,0
+		JE		fin
+		MOV		AH,0x0e			; 显示字符
+		MOV		BX,15			; 字符颜色
+		INT		0x10			; 调用BIOS显示服务
+		JMP		putloop
+
+fin:
+		HLT
+		JMP		fin
+
+msg_start:
+		DB		"IPL Start", 0x0d, 0x0a, 0
+
+msg_jump:
+		DB		"Jump to ASM", 0x0d, 0x0a, 0
+
+msg_error:
+		DB		0x0a, 0x0a
+		DB		"Load Error"
+		DB		0x0a
+		DB		0
+
+		TIMES	510-($-$$) DB 0		; 填充到510字节
+
+		DB		0x55, 0xaa		; 引导签名
