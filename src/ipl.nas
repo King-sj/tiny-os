@@ -68,7 +68,7 @@ next:
 		ADD		AX,0x0020		; 指向下一个扇区位置
 		MOV		ES,AX
 		ADD		CL,1			; 扇区号+1
-		CMP		CL,4			; 读取3个扇区就够了（包含system.bin）
+		CMP		CL,18			; 先读取18个扇区（包含system.bin）（再多就要加入换柱面、磁头的逻辑了, 以后再说）
 		JBE		readloop
 
 ; 读取完成，跳转到第二阶段
@@ -78,6 +78,9 @@ next:
 
 error:
 		MOV		SI,msg_error
+        CALL	putstr
+        HLT
+        JMP $
 
 putstr:
 		MOV		AL,[SI]

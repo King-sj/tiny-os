@@ -50,38 +50,37 @@ void io_store_eflags(int eflags);
 #define COL8_840084		13
 #define COL8_008484		14
 #define COL8_848484		15
+
+/* 引导信息结构体 */
+struct BOOTINFO {
+    char cyls, leds, vmode, reserve;
+    short scrnx, scrny;
+    char *vram;
+};
 // 函数声明
 void init_palette(void);
 void set_palette(int start, int end, unsigned char *rgb);
 void boxfill8(unsigned char *vram, int xsize, unsigned char c, int x0, int y0, int x1, int y1);
+void init_screen(char *vram, int x, int y);
+void putfont8(unsigned char *vram, int xsize, int x, int y, char c, unsigned char *font);
 
 /* C代码主函数 */
 void HariMain(void)
 {
-    char *vram = (char *) 0xa0000;  // 直接初始化
-    int i, xsize, ysize;
-    // 设置调色板 failed, 先使用默认的颜色
-    // init_palette();/* 设定调色板 */
-    xsize = 320;
-    ysize = 200;
+    struct BOOTINFO *binfo = (struct BOOTINFO *) 0x0ff0;
 
-    /* 根据 0xa0000 + x + y * 320 计算坐标 8*/
-    boxfill8(vram, xsize, COL8_008484,  0,         0,          xsize -  1, ysize - 29);
-    boxfill8(vram, xsize, COL8_C6C6C6,  0,         ysize - 28, xsize -  1, ysize - 28);
-    boxfill8(vram, xsize, COL8_FFFFFF,  0,         ysize - 27, xsize -  1, ysize - 27);
-    boxfill8(vram, xsize, COL8_C6C6C6,  0,         ysize - 26, xsize -  1, ysize -  1);
+    // 先使用默认调色板
+    // init_palette(); /* 设定调色板 */
 
-    boxfill8(vram, xsize, COL8_FFFFFF,  3,         ysize - 24, 59,         ysize - 24);
-    boxfill8(vram, xsize, COL8_FFFFFF,  2,         ysize - 24,  2,         ysize -  4);
-    boxfill8(vram, xsize, COL8_848484,  3,         ysize -  4, 59,         ysize -  4);
-    boxfill8(vram, xsize, COL8_848484, 59,         ysize - 23, 59,         ysize -  5);
-    boxfill8(vram, xsize, COL8_000000,  2,         ysize -  3, 59,         ysize -  3);
-    boxfill8(vram, xsize, COL8_000000, 60,         ysize - 24, 60,         ysize -  3);
+    // 正确的字体A的位图数据（8x16像素）
+    static unsigned char font_A[16] = {
+        0x00, 0x18, 0x18, 0x18, 0x24, 0x24, 0x42, 0x7e,
+        0x42, 0x42, 0x42, 0x42, 0x42, 0xe7, 0x00, 0x00
+    };
 
-    boxfill8(vram, xsize, COL8_848484, xsize - 47, ysize - 24, xsize -  4, ysize - 24);
-    boxfill8(vram, xsize, COL8_848484, xsize - 47, ysize - 23, xsize - 47, ysize -  4);
-    boxfill8(vram, xsize, COL8_FFFFFF, xsize - 47, ysize -  3, xsize -  4, ysize -  3);
-    boxfill8(vram, xsize, COL8_FFFFFF, xsize -  3, ysize - 24, xsize -  3, ysize -  3);
+    // 暂时不直接访问显存，先确保基础功能正常
+    init_screen(binfo->vram, binfo->scrnx, binfo->scrny);
+    putfont8((unsigned char*)binfo->vram, binfo->scrnx, 8, 8, COL8_848484, font_A);
 
     // 成功！进入无限循环，防止返回到汇编代码
     while(1) {
@@ -131,6 +130,53 @@ void boxfill8(unsigned char *vram, int xsize, unsigned char c, int x0, int y0, i
     for (y = y0; y <= y1; y++) {
         for (x = x0; x <= x1; x++)
             vram[y * xsize + x] = c;
+    }
+    return;
+}
+
+// 初始化屏幕
+void init_screen(char *vram, int x, int y)
+{
+	boxfill8((unsigned char*)vram, x, COL8_008484,  0,     0,      x -  1, y - 29);
+	boxfill8((unsigned char*)vram, x, COL8_C6C6C6,  0,     y - 28, x -  1, y - 28);
+	boxfill8((unsigned char*)vram, x, COL8_FFFFFF,  0,     y - 27, x -  1, y - 27);
+	boxfill8((unsigned char*)vram, x, COL8_C6C6C6,  0,     y - 26, x -  1, y -  1);
+
+	boxfill8((unsigned char*)vram, x, COL8_FFFFFF,  3,     y - 24, 59,     y - 24);
+	boxfill8((unsigned char*)vram, x, COL8_FFFFFF,  2,     y - 24,  2,     y -  4);
+	boxfill8((unsigned char*)vram, x, COL8_848484,  3,     y -  4, 59,     y -  4);
+	boxfill8((unsigned char*)vram, x, COL8_848484, 59,     y - 23, 59,     y -  5);
+	boxfill8((unsigned char*)vram, x, COL8_000000,  2,     y -  3, 59,     y -  3);
+	boxfill8((unsigned char*)vram, x, COL8_000000, 60,     y - 24, 60,     y -  3);
+
+	boxfill8((unsigned char*)vram, x, COL8_848484, x - 47, y - 24, x -  4, y - 24);
+	boxfill8((unsigned char*)vram, x, COL8_848484, x - 47, y - 23, x - 47, y -  4);
+	boxfill8((unsigned char*)vram, x, COL8_FFFFFF, x - 47, y -  3, x -  4, y -  3);
+	boxfill8((unsigned char*)vram, x, COL8_FFFFFF, x -  3, y - 24, x -  3, y -  3);
+	return;
+}
+
+// 在屏幕上绘制一个字符 - 添加边界检查
+void putfont8(unsigned char *vram, int xsize, int x, int y, char c, unsigned char *font) {
+    int i, j;
+    unsigned char *p;
+    unsigned char d; /* data */
+
+    // 边界检查：确保字体完全在屏幕范围内
+    if (x < 0 || y < 0 || x + 8 > xsize || y + 16 > 200) {
+        return; // 超出边界则不绘制
+    }
+
+    for (i = 0; i < 16; i++) {
+        p = vram + (y + i) * xsize + x;
+        d = font[i];
+
+        // 逐位检查并绘制，更加安全
+        for (j = 0; j < 8; j++) {
+            if ((d & (0x80 >> j)) != 0) {
+                p[j] = c;
+            }
+        }
     }
     return;
 }

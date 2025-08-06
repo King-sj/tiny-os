@@ -13,17 +13,23 @@ build/naskfunc.o: src/naskfunc.nas Makefile
 	mkdir -p build
 	nasm -f elf32 src/naskfunc.nas -o build/naskfunc.o
 
+build/font.o: src/font.txt Makefile
+	mkdir -p build
+	nasm -f elf32 src/font.nas -o build/font.o
+
 build/bootpack.o: src/bootpack.c Makefile
 	mkdir -p build
-	x86_64-elf-gcc -m32 -nostdlib -fno-builtin -fno-stack-protector -c src/bootpack.c -o build/bootpack.o
+# 	编译C代码为32位目标文件，禁用标准库和栈保护，启用调试信息
+	x86_64-elf-gcc -m32 -nostdlib -fno-builtin -fno-stack-protector -g -c src/bootpack.c -o build/bootpack.o
 
-build/bootpack.bin: build/bootpack.o build/naskfunc.o Makefile
+build/bootpack.bin: build/bootpack.o build/naskfunc.o build/font.o Makefile
 	# 链接生成bootpack.bin，直接链接C代码
-	x86_64-elf-ld -m elf_i386 --oformat binary -Ttext 0x0000 -o build/bootpack.tmp build/bootpack.o build/naskfunc.o
+	x86_64-elf-ld -m elf_i386 --oformat binary -Ttext 0x0000 -o build/bootpack.tmp build/bootpack.o build/naskfunc.o build/font.o
+	# 同时生成带调试信息的ELF文件用于调试
+	x86_64-elf-ld -m elf_i386 -Ttext 0x0000 -o build/bootpack.elf build/bootpack.o build/naskfunc.o build/font.o
 	# 固定bootpack.bin为32768字节（64个扇区），为未来功能扩展预留充足空间
 	dd if=/dev/zero of=build/bootpack.bin bs=32768 count=1 2>/dev/null
 	dd if=build/bootpack.tmp of=build/bootpack.bin conv=notrunc 2>/dev/null
-	rm -f build/bootpack.tmp
 
 build/system.bin: build/asmhead.bin build/bootpack.bin Makefile
 	# 创建固定大小的system.bin（65个扇区 = 33280字节）
@@ -47,6 +53,29 @@ img: build/ipl.bin build/system.bin Makefile
 
 run: img
 	qemu-system-i386 -fda build/tiny-os.img -boot a
+
+log: img
+	timeout 10 qemu-system-i386 -fda build/tiny-os.img -boot a -d cpu,int,exec -D debug.log -no-reboot -no-shutdown 2>&1 || true
+
+debug-server: img
+# 	使用 qemu 的调试功能，开启 gdb 服务器
+	qemu-system-i386 -fda build/tiny-os.img -s -S
+# 	使用 qemu 的监控台连接调试
+# 	qemu-system-i386 -fda build/tiny-os.img -s -S -monitor stdio
+
+debug-connect:
+# 	使用 gdb 连接到 qemu 的 gdb 服务器
+# 	地址重映射, 0x8200 + 512(10进制) = 0x8400
+	x86_64-elf-gdb -ex "file build/bootpack.elf" \
+	               -ex "target remote :1234" \
+	               -ex "set architecture i386" \
+				   -ex "add-symbol-file build/bootpack.elf 0x8400" \
+	               -ex "break *0x7c00" \
+	               -ex "break HariMain" \
+	               -ex "display/10i \$$pc"
+
+# 	使用 lldb 连接到 qemu 的 gdb 服务器
+# 	lldb  -arch i386 -o "gdb-remote 1234" -o "register read" -o "memory read 0x7c00" -o "breakpoint set --address 0x7c00"
 
 clean:
 	rm -rf build/

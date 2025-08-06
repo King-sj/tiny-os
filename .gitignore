@@ -2,3 +2,4 @@
 *.img
 build/
 *.o
+*.log

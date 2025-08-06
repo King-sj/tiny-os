@@ -103,17 +103,8 @@ pipelineflush:
 		MOV		GS,AX
 		MOV		SS,AX
 
-; 在32位保护模式下测试显存访问
-; 简单地在第四行画一条蓝线作为保护模式成功标记
-		MOV		EAX, 0xa0000        ; VGA显存起始地址
-		ADD		EAX, 960            ; 第四行起始位置（320*3）
-		MOV		BL, 1               ; 蓝色
-		MOV		ECX, 320            ; 一整行
-simple_fill:
-		MOV		[EAX], BL          ; 写入蓝色像素
-		INC		EAX                ; 下一个像素
-		DEC		ECX                ; 计数器减1
-		JNZ		simple_fill        ; 继续循环
+; 在32位保护模式下，暂时不直接访问显存
+; 让C代码来处理显存访问会更安全
 
 ; 跳转到C代码 - 使用固定的文件大小
 ; asmhead.bin固定为512字节，bootpack.bin从0x8200 + 512开始
