@@ -20,19 +20,19 @@ build/bootpack.o: src/bootpack.c Makefile
 build/bootpack.bin: build/bootpack.o build/naskfunc.o Makefile
 	# 链接生成bootpack.bin，直接链接C代码
 	x86_64-elf-ld -m elf_i386 --oformat binary -Ttext 0x0000 -o build/bootpack.tmp build/bootpack.o build/naskfunc.o
-	# 固定bootpack.bin为1024字节（2个扇区）
-	dd if=/dev/zero of=build/bootpack.bin bs=1024 count=1 2>/dev/null
+	# 固定bootpack.bin为32768字节（64个扇区），为未来功能扩展预留充足空间
+	dd if=/dev/zero of=build/bootpack.bin bs=32768 count=1 2>/dev/null
 	dd if=build/bootpack.tmp of=build/bootpack.bin conv=notrunc 2>/dev/null
 	rm -f build/bootpack.tmp
 
 build/system.bin: build/asmhead.bin build/bootpack.bin Makefile
-	# 创建固定大小的system.bin（3个扇区 = 1536字节）
+	# 创建固定大小的system.bin（65个扇区 = 33280字节）
 	# asmhead.bin: 512字节（1个扇区）
-	# bootpack.bin: 1024字节（2个扇区）
-	dd if=/dev/zero of=build/system.bin bs=512 count=3 2>/dev/null
+	# bootpack.bin: 32768字节（64个扇区）
+	dd if=/dev/zero of=build/system.bin bs=512 count=65 2>/dev/null
 	# 写入asmhead.bin到第1个扇区
 	dd if=build/asmhead.bin of=build/system.bin conv=notrunc 2>/dev/null
-	# 写入bootpack.bin到第2-3个扇区
+	# 写入bootpack.bin到第2-65个扇区
 	dd if=build/bootpack.bin of=build/system.bin bs=512 seek=1 conv=notrunc 2>/dev/null
 
 # 创建软盘镜像
