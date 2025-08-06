@@ -153,7 +153,57 @@ make run
    - 切换到保护模式
 4. **BOOTPACK阶段**: 执行C代码主程序，绘制桌面界面
 
-## 调试技巧
+## 调试说明
+
+### 使用GDB调试
+
+项目支持使用x86_64-elf-gdb进行源码级调试：
+
+```bash
+# 终端1：启动调试服务器
+make debug-server
+
+# 终端2：连接调试器
+make debug-connect
+```
+
+调试器会自动：
+- 连接到QEMU的gdb服务器
+- 加载带调试信息的ELF文件
+- 设置地址重映射（bootpack加载到0x8400）
+- 在引导扇区(0x7c00)和HariMain函数设置断点
+- 显示当前指令
+
+### 常用调试命令
+
+```bash
+# 查看符号信息
+(gdb) info functions       # 所有函数
+(gdb) info variables      # 全局变量
+(gdb) info address HariMain  # 函数地址
+
+# 源码级调试
+(gdb) break HariMain      # 函数断点
+(gdb) list               # 查看源码
+(gdb) step               # 单步进入
+(gdb) next               # 单步跳过
+(gdb) print binfo        # 打印变量
+(gdb) info locals        # 局部变量
+
+# 内存和汇编查看
+(gdb) x/10i $pc          # 查看汇编
+(gdb) x/16xb 0x7c00      # 查看内存
+(gdb) disas HariMain     # 反汇编函数
+```
+
+### 关键调试地址
+
+- **0x7C00**: 引导扇区入口点
+- **0x8200**: asmhead.nas加载地址
+- **0x8400**: bootpack.c入口地址（HariMain函数）
+- **0xA0000**: VGA显存地址
+
+### 调试技巧
 
 代码中使用颜色条纹作为执行标记：
 - **实模式测试**:
