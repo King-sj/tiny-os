@@ -18,6 +18,7 @@ GLOBAL io_in32
 GLOBAL io_out32
 GLOBAL io_load_eflags
 GLOBAL io_store_eflags
+GLOBAL sleep_ms
 
 ; void io_hlt(void); - CPU休眠
 io_hlt:
@@ -92,4 +93,21 @@ io_store_eflags:
     MOV     EAX,[ESP+4]     ; 获取EFLAGS值
     PUSH    EAX             ; 压入EFLAGS
     POPFD                   ; 恢复EFLAGS
+    RET
+
+; void sleep_ms(int milliseconds); - 毫秒级睡眠（简单忙等待实现）
+sleep_ms:
+    MOV     ECX,[ESP+4]     ; 获取毫秒数
+    CMP     ECX,0
+    JLE     sleep_done      ; 如果<=0则直接返回
+
+    ; 简单的循环计数实现（需要根据CPU频率调整）
+    ; 这里假设1ms大约需要循环1000000次（需要校准）
+    IMUL    ECX,1000000     ; 每毫秒循环次数
+
+sleep_loop:
+    DEC     ECX
+    JNZ     sleep_loop
+
+sleep_done:
     RET

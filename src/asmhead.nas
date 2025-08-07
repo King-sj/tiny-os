@@ -13,7 +13,7 @@ SCRNX	EQU		0x0ff4			; 分辨率X
 SCRNY	EQU		0x0ff6			; 分辨率Y
 VRAM	EQU		0x0ff8			; 图像缓冲区的起始地址
 
-		ORG		0x8200			; 这个程序要被装载的内存地址
+		ORG		0x8200			; 声明这个程序要被装载的内存地址（实际决定不了），汇编器基于此生成正确的标签地址
 
 ; 显示进入asmhead消息
 		MOV		SI,msg_asmhead
@@ -131,6 +131,7 @@ final_loop:
 		HLT
 		JMP		final_loop
 
+; 等待键盘输出完成
 waitkbdout:
 		IN		 AL,0x64
 		AND		 AL,0x02

@@ -13,6 +13,14 @@ build/naskfunc.o: src/naskfunc.nas Makefile
 	mkdir -p build
 	nasm -f elf32 src/naskfunc.nas -o build/naskfunc.o
 
+build/sprintf_asm.o: src/sprintf_asm.nas Makefile
+	mkdir -p build
+	nasm -f elf32 src/sprintf_asm.nas -o build/sprintf_asm.o
+
+build/sprintf.o: src/sprintf.c Makefile
+	mkdir -p build
+	x86_64-elf-gcc -m32 -nostdlib -fno-builtin -fno-stack-protector -g -c src/sprintf.c -o build/sprintf.o
+
 build/font.o: src/font.txt Makefile
 	mkdir -p build
 	nasm -f elf32 src/font.nas -o build/font.o
@@ -22,11 +30,11 @@ build/bootpack.o: src/bootpack.c Makefile
 # 	编译C代码为32位目标文件，禁用标准库和栈保护，启用调试信息
 	x86_64-elf-gcc -m32 -nostdlib -fno-builtin -fno-stack-protector -g -c src/bootpack.c -o build/bootpack.o
 
-build/bootpack.bin: build/bootpack.o build/naskfunc.o build/font.o Makefile
-	# 链接生成bootpack.bin，直接链接C代码
-	x86_64-elf-ld -m elf_i386 --oformat binary -Ttext 0x0000 -o build/bootpack.tmp build/bootpack.o build/naskfunc.o build/font.o
+build/bootpack.bin: build/bootpack.o build/naskfunc.o build/sprintf_asm.o build/sprintf.o build/font.o Makefile
+	# 链接生成bootpack.bin，直接链接C代码, 0x8400是bootpack的起始地址
+	x86_64-elf-ld -m elf_i386 --oformat binary -Ttext 0x8400 -o build/bootpack.tmp build/bootpack.o build/naskfunc.o build/sprintf_asm.o build/sprintf.o build/font.o
 	# 同时生成带调试信息的ELF文件用于调试
-	x86_64-elf-ld -m elf_i386 -Ttext 0x0000 -o build/bootpack.elf build/bootpack.o build/naskfunc.o build/font.o
+	x86_64-elf-ld -m elf_i386 -Ttext 0x8400 -o build/bootpack.elf build/bootpack.o build/naskfunc.o build/sprintf_asm.o build/sprintf.o build/font.o
 	# 固定bootpack.bin为32768字节（64个扇区），为未来功能扩展预留充足空间
 	dd if=/dev/zero of=build/bootpack.bin bs=32768 count=1 2>/dev/null
 	dd if=build/bootpack.tmp of=build/bootpack.bin conv=notrunc 2>/dev/null
@@ -52,24 +60,48 @@ img: build/ipl.bin build/system.bin Makefile
 	dd if=build/system.bin of=build/tiny-os.img bs=512 seek=1 conv=notrunc 2>/dev/null
 
 run: img
-	qemu-system-i386 -fda build/tiny-os.img -boot a
+	qemu-system-i386 -drive file=build/tiny-os.img,format=raw,if=floppy -boot a
+
+# 运行时显示CPU信息
+run-info: img
+	qemu-system-i386 -drive file=build/tiny-os.img,format=raw,if=floppy -boot a -cpu qemu32 -d cpu
+
+# 慢速运行（模拟低频CPU）
+run-slow: img
+	qemu-system-i386 -drive file=build/tiny-os.img,format=raw,if=floppy -boot a -icount shift=10
+
+# 快速运行（模拟高频CPU）
+run-fast: img
+	qemu-system-i386 -drive file=build/tiny-os.img,format=raw,if=floppy -boot a -icount shift=0
+
+# 精确时钟同步运行
+run-sync: img
+	qemu-system-i386 -drive file=build/tiny-os.img,format=raw,if=floppy -boot a -icount shift=auto,align=on
+
+# 使用不同的CPU类型运行
+run-486: img
+	qemu-system-i386 -drive file=build/tiny-os.img,format=raw,if=floppy -boot a -cpu 486
+
+run-pentium: img
+	qemu-system-i386 -drive file=build/tiny-os.img,format=raw,if=floppy -boot a -cpu pentium
+
+run-modern: img
+	qemu-system-i386 -drive file=build/tiny-os.img,format=raw,if=floppy -boot a -cpu Haswell
 
 log: img
-	timeout 10 qemu-system-i386 -fda build/tiny-os.img -boot a -d cpu,int,exec -D debug.log -no-reboot -no-shutdown 2>&1 || true
+	timeout 10 qemu-system-i386 -drive file=build/tiny-os.img,format=raw,if=floppy -boot a -d cpu,int,exec -D debug.log -no-reboot -no-shutdown 2>&1 || true
 
 debug-server: img
 # 	使用 qemu 的调试功能，开启 gdb 服务器
-	qemu-system-i386 -fda build/tiny-os.img -s -S
+	qemu-system-i386 -drive file=build/tiny-os.img,format=raw,if=floppy -s -S
 # 	使用 qemu 的监控台连接调试
 # 	qemu-system-i386 -fda build/tiny-os.img -s -S -monitor stdio
 
 debug-connect:
 # 	使用 gdb 连接到 qemu 的 gdb 服务器
-# 	地址重映射, 0x8200 + 512(10进制) = 0x8400
 	x86_64-elf-gdb -ex "file build/bootpack.elf" \
 	               -ex "target remote :1234" \
 	               -ex "set architecture i386" \
-				   -ex "add-symbol-file build/bootpack.elf 0x8400" \
 	               -ex "break *0x7c00" \
 	               -ex "break HariMain" \
 	               -ex "display/10i \$$pc"

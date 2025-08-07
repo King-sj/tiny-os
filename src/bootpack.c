@@ -1,4 +1,3 @@
-
 /* 汇编入口点 - 必须在最前面 */
 __asm__(
     ".global bootpack\n"
@@ -32,6 +31,13 @@ void io_out32(int port, int data);
 int io_load_eflags(void);
 // 设置中断标志寄存器的值
 void io_store_eflags(int eflags);
+// 毫秒级睡眠
+void sleep_ms(int milliseconds);
+
+// sprintf 相关函数
+void tiny_sprintf_d(char* buffer, const char* format, int value);
+void tiny_sprintf_x(char* buffer, const char* format, int value);
+void tiny_sprintf_s(char* buffer, const char* format, const char* str_value);
 
 // 设置调色板
 #define COL8_000000		0
@@ -63,23 +69,20 @@ void set_palette(int start, int end, unsigned char *rgb);
 void boxfill8(unsigned char *vram, int xsize, unsigned char c, int x0, int y0, int x1, int y1);
 void init_screen(char *vram, int x, int y);
 void putfont8(unsigned char *vram, int xsize, int x, int y, char c, unsigned char *font);
-
+// 正确的字体A的位图数据（8x16像素）
+unsigned char font_A[16] = {
+    0x00, 0x18, 0x18, 0x18, 0x24, 0x24, 0x42, 0x7e,
+    0x42, 0x42, 0x42, 0x42, 0x42, 0xe7, 0x00, 0x00
+};
 /* C代码主函数 */
 void HariMain(void)
 {
     struct BOOTINFO *binfo = (struct BOOTINFO *) 0x0ff0;
-
+    char s[40];
     // 先使用默认调色板
-    // init_palette(); /* 设定调色板 */
-
-    // 正确的字体A的位图数据（8x16像素）
-    static unsigned char font_A[16] = {
-        0x00, 0x18, 0x18, 0x18, 0x24, 0x24, 0x42, 0x7e,
-        0x42, 0x42, 0x42, 0x42, 0x42, 0xe7, 0x00, 0x00
-    };
-
-    // 暂时不直接访问显存，先确保基础功能正常
+    init_palette(); /* 设定调色板 */
     init_screen(binfo->vram, binfo->scrnx, binfo->scrny);
+
     putfont8((unsigned char*)binfo->vram, binfo->scrnx, 8, 8, COL8_848484, font_A);
 
     // 成功！进入无限循环，防止返回到汇编代码
@@ -155,28 +158,56 @@ void init_screen(char *vram, int x, int y)
 	boxfill8((unsigned char*)vram, x, COL8_FFFFFF, x -  3, y - 24, x -  3, y -  3);
 	return;
 }
-
 // 在屏幕上绘制一个字符 - 添加边界检查
 void putfont8(unsigned char *vram, int xsize, int x, int y, char c, unsigned char *font) {
-    int i, j;
-    unsigned char *p;
-    unsigned char d; /* data */
-
     // 边界检查：确保字体完全在屏幕范围内
     if (x < 0 || y < 0 || x + 8 > xsize || y + 16 > 200) {
         return; // 超出边界则不绘制
     }
-
-    for (i = 0; i < 16; i++) {
-        p = vram + (y + i) * xsize + x;
-        d = font[i];
-
-        // 逐位检查并绘制，更加安全
-        for (j = 0; j < 8; j++) {
-            if ((d & (0x80 >> j)) != 0) {
+    for (int i = 0; i < 16; i++) {  // 遍历字体的16行
+        unsigned char *p = vram + (y + i) * xsize + x;
+        unsigned char d = font[i];
+        // 正确的位操作：最高位对应最左边的像素
+        for (int j = 0; j < 8; j++) {  // 遍历字体的8列
+            //例如 d = 0x18 = 0b00011000
+            //bit 7 (最高位) 对应 j=0 (最左边像素)
+            //bit 0 (最低位) 对应 j=7 (最右边像素)
+            if ((d >> (7-j)) & 1) {
                 p[j] = c;
+            } else {
+                p[j] = 15-c; // 如果不绘制字符，则填充背景色
             }
         }
     }
     return;
+}
+
+// 字符串显示函数
+void putfonts8_asc(unsigned char *vram, int xsize, int x, int y, char c, unsigned char *s) {
+    extern unsigned char __font[16 * 256];
+    for (; *s != 0x00; s++) {
+        putfont8(vram, xsize, x, y, c, __font + *s * 16);
+        x += 8;
+    }
+    return;
+}
+
+// 测试 sleep 和 sprintf 功能
+void test_new_functions() {
+    extern unsigned char __font[16 * 256];
+    char test_buffer[128];
+
+    // 测试 sprintf 功能
+    tiny_sprintf_d(test_buffer, "Number: %d", 42);
+    putfonts8_asc((unsigned char*)0xa0000, 320, 10, 100, COL8_FFFFFF, (unsigned char*)test_buffer);
+
+    sleep_ms(1000);  // 睡眠1秒
+
+    tiny_sprintf_x(test_buffer, "Hex: 0x%x", 255);
+    putfonts8_asc((unsigned char*)0xa0000, 320, 10, 120, COL8_FFFFFF, (unsigned char*)test_buffer);
+
+    sleep_ms(1000);  // 再睡眠1秒
+
+    tiny_sprintf_s(test_buffer, "String: %s", "Hello OS!");
+    putfonts8_asc((unsigned char*)0xa0000, 320, 10, 140, COL8_FFFFFF, (unsigned char*)test_buffer);
 }
