@@ -79,13 +79,22 @@ void HariMain(void)
     char s[40];
     init_palette(); /* 设定调色板 */
     init_screen(binfo->vram, binfo->scrnx, binfo->scrny);
-    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 0, COL8_FFFFFF, (unsigned char*)"Hello OS!");
+    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 0, COL8_FFFFFF, (unsigned char*)"HELLO OS!");
+    sleep_ms(3000);
+    init_screen(binfo->vram, binfo->scrnx, binfo->scrny); // 清屏
+    tiny_sprintf_d(s, "WIDTH: %d", binfo->scrnx);
+    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 0, COL8_FFFFFF, (unsigned char*)s);
+    sleep_ms(1000);
+    tiny_sprintf_d(s, "HEIGHT: %d", binfo->scrny);
+    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 32, COL8_FFFFFF, (unsigned char*)s);
+    sleep_ms(3000);
+    init_screen(binfo->vram, binfo->scrnx, binfo->scrny); // 清屏
     // Test显示ASCII字符
-    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, (unsigned char*)"123456789");
-    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 32, COL8_FFFFFF, (unsigned char*)"ABCDEFGHIJKLMNOPQRSTUVWXYZ");
-    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 48, COL8_FFFFFF, (unsigned char*)"abcdefghijklmnopqrstuvwxyz");
-    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 64, COL8_FFFFFF, (unsigned char*)" !@#$%^&*()_+");
-    // test_new_functions();
+    // putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, (unsigned char*)"123456789");
+    // putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 32, COL8_FFFFFF, (unsigned char*)"ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    // putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 48, COL8_FFFFFF, (unsigned char*)"abcdefghijklmnopqrstuvwxyz");
+    // putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 64, COL8_FFFFFF, (unsigned char*)" !@#$%^&*()_+");
+    test_new_functions();
     // 成功！进入无限循环，防止返回到汇编代码
     while(1) {
         io_hlt();  // CPU休眠，节省电力
@@ -195,16 +204,16 @@ void test_new_functions() {
     char test_buffer[128];
 
     // 测试 sprintf 功能
-    tiny_sprintf_d(test_buffer, "Number: %d", 42);
+    tiny_sprintf_d(test_buffer, "NUMBER: %d", 42);
     putfonts8_asc((unsigned char*)0xa0000, 320, 10, 100, COL8_FFFFFF, (unsigned char*)test_buffer);
 
     sleep_ms(1000);  // 睡眠1秒
 
-    tiny_sprintf_x(test_buffer, "Hex: 0x%x", 255);
+    tiny_sprintf_x(test_buffer, "HEX: 0X%x", 255);
     putfonts8_asc((unsigned char*)0xa0000, 320, 10, 120, COL8_FFFFFF, (unsigned char*)test_buffer);
 
     sleep_ms(1000);  // 再睡眠1秒
 
-    tiny_sprintf_s(test_buffer, "String: %s", "Hello OS!");
+    tiny_sprintf_s(test_buffer, "STRING: %s", "WELCOME TO TINY OS!");
     putfonts8_asc((unsigned char*)0xa0000, 320, 10, 140, COL8_FFFFFF, (unsigned char*)test_buffer);
 }

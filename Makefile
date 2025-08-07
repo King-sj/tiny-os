@@ -20,9 +20,9 @@ build/sprintf_asm.o: src/sprintf_asm.nas Makefile
 build/sprintf.o: src/sprintf.c Makefile
 	mkdir -p build
 	x86_64-elf-gcc -m32 -nostdlib -fno-builtin -fno-stack-protector -g -c src/sprintf.c -o build/sprintf.o
-build/font.nas: src/font.txt Makefile
+build/font.nas: static/font/font.txt Makefile
 	mkdir -p build
-	python3 src/makefont.py src/font.txt
+	python3 src/makefont.py static/font/font.txt
 build/font.o: build/font.nas Makefile
 	mkdir -p build
 	nasm -f elf32 build/font.nas -o build/font.o
