@@ -69,22 +69,23 @@ void set_palette(int start, int end, unsigned char *rgb);
 void boxfill8(unsigned char *vram, int xsize, unsigned char c, int x0, int y0, int x1, int y1);
 void init_screen(char *vram, int x, int y);
 void putfont8(unsigned char *vram, int xsize, int x, int y, char c, unsigned char *font);
-// 正确的字体A的位图数据（8x16像素）
-unsigned char font_A[16] = {
-    0x00, 0x18, 0x18, 0x18, 0x24, 0x24, 0x42, 0x7e,
-    0x42, 0x42, 0x42, 0x42, 0x42, 0xe7, 0x00, 0x00
-};
+void putfonts8_asc(unsigned char *vram, int xsize, int x, int y, char c, unsigned char *s);
+void test_new_functions(void);
 /* C代码主函数 */
+extern const char __font[16 * 256]; // 声明全局字体数组
 void HariMain(void)
 {
     struct BOOTINFO *binfo = (struct BOOTINFO *) 0x0ff0;
     char s[40];
-    // 先使用默认调色板
     init_palette(); /* 设定调色板 */
     init_screen(binfo->vram, binfo->scrnx, binfo->scrny);
-
-    putfont8((unsigned char*)binfo->vram, binfo->scrnx, 8, 8, COL8_848484, font_A);
-
+    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 0, COL8_FFFFFF, (unsigned char*)"Hello OS!");
+    // Test显示ASCII字符
+    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, (unsigned char*)"123456789");
+    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 32, COL8_FFFFFF, (unsigned char*)"ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 48, COL8_FFFFFF, (unsigned char*)"abcdefghijklmnopqrstuvwxyz");
+    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 64, COL8_FFFFFF, (unsigned char*)" !@#$%^&*()_+");
+    // test_new_functions();
     // 成功！进入无限循环，防止返回到汇编代码
     while(1) {
         io_hlt();  // CPU休眠，节省电力
@@ -167,15 +168,13 @@ void putfont8(unsigned char *vram, int xsize, int x, int y, char c, unsigned cha
     for (int i = 0; i < 16; i++) {  // 遍历字体的16行
         unsigned char *p = vram + (y + i) * xsize + x;
         unsigned char d = font[i];
-        // 正确的位操作：最高位对应最左边的像素
+        // 最高位对应最左边的像素
         for (int j = 0; j < 8; j++) {  // 遍历字体的8列
             //例如 d = 0x18 = 0b00011000
             //bit 7 (最高位) 对应 j=0 (最左边像素)
             //bit 0 (最低位) 对应 j=7 (最右边像素)
             if ((d >> (7-j)) & 1) {
                 p[j] = c;
-            } else {
-                p[j] = 15-c; // 如果不绘制字符，则填充背景色
             }
         }
     }
@@ -184,7 +183,6 @@ void putfont8(unsigned char *vram, int xsize, int x, int y, char c, unsigned cha
 
 // 字符串显示函数
 void putfonts8_asc(unsigned char *vram, int xsize, int x, int y, char c, unsigned char *s) {
-    extern unsigned char __font[16 * 256];
     for (; *s != 0x00; s++) {
         putfont8(vram, xsize, x, y, c, __font + *s * 16);
         x += 8;
@@ -194,7 +192,6 @@ void putfonts8_asc(unsigned char *vram, int xsize, int x, int y, char c, unsigne
 
 // 测试 sleep 和 sprintf 功能
 void test_new_functions() {
-    extern unsigned char __font[16 * 256];
     char test_buffer[128];
 
     // 测试 sprintf 功能
