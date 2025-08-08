@@ -66,23 +66,23 @@ VRAM	EQU		0x0ff8			; 图像缓冲区的起始地址
 ; 防止PIC接受所有中断
 ; AT兼容机的规范、PIC初始化
 ; 然后之前在CLI不做任何事就挂起
-; PIC在同意后初始化
+; 防止在初始化期间被中断打断，保证安全
 
 		MOV		AL,0xff
-		OUT		0x21,AL
+		OUT		0x21,AL         ; 屏蔽主PIC所有中断
 		NOP						; 不断执行OUT指令
-		OUT		0xa1,AL
+		OUT		0xa1,AL         ; 屏蔽从PIC所有中断
 
-		CLI						; 进一步中断CPU
+		CLI						 ; 禁止CPU响应中断
 
-; 让CPU支持1M以上内存、设置A20GATE
+; 开启A20地址线, 让CPU支持1M以上内存、设置A20GATE
 
-		CALL	waitkbdout
+		CALL	waitkbdout      ; 等待键盘控制器空闲
 		MOV		AL,0xd1
-		OUT		0x64,AL
+		OUT		0x64,AL     ; 发送写输出端口命令
 		CALL	waitkbdout
 		MOV		AL,0xdf			; 启用A20
-		OUT		0x60,AL
+		OUT		0x60,AL      ; 写入输出端口
 		CALL	waitkbdout
 
 ; 保护模式转换
@@ -103,16 +103,9 @@ pipelineflush:
 		MOV		GS,AX
 		MOV		SS,AX
 
-; 在32位保护模式下，暂时不直接访问显存
-; 让C代码来处理显存访问会更安全
-
-; 跳转到C代码 - 使用固定的文件大小
 ; asmhead.bin固定为512字节，bootpack.bin从0x8200 + 512开始
 		MOV		ESP,0x00310000      ; 设置堆栈
-
-		; 直接跳转到固定地址的bootpack
-		; 0x8200 + 512 = 0x8400
-		JMP		DWORD 2*8:0x8400    ; 远跳转到C代码
+        JMP         DWORD 2*8:bootpack  ; 远跳转到C代码
 
 ; 如果C代码返回，画紫色标记
 return_mark:
