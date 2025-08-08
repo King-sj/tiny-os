@@ -2,7 +2,7 @@
 ; Based on 30dayMakeOS 03_day
 ; TAB=4
 
-CYLS	EQU		1				; 柱面数
+CYLS	EQU		30				; 柱面数
 
 		ORG		0x7c00			; 声明程序装载地址，用于汇编器生成正确的标签地址
 
@@ -68,12 +68,21 @@ next:
 		ADD		AX,0x0020		; 指向下一个扇区位置
 		MOV		ES,AX
 		ADD		CL,1			; 扇区号+1
-		CMP		CL,18			; 先读取18个扇区（包含system.bin）（再多就要加入换柱面、磁头的逻辑了, 以后再说）
+		CMP		CL,18			; 读取18个扇区
 		JBE		readloop
+        MOV     CL,1            ; 重置扇区号
+        ADD		DH,1			; 磁头+1
+        CMP		DH,2			; 2个磁头
+        JB		readloop		; 如果磁头小于2，继续读取
+        MOV		DH,0			; 重置磁头
+        ADD		CH,1			; 柱面+1
+        CMP		CH,CYLS		    ; 比较柱面数
+        JBE		readloop		; 如果柱面小于CYLS，继续读取
 
 ; 读取完成，跳转到第二阶段
 		MOV		SI,msg_jump
 		CALL	putstr
+        MOV		[0x0ff0],CH     ; 保存柱面数
 		JMP		0x8200			; 跳转到asmhead.nas（被加载到0x8200）
 
 error:
