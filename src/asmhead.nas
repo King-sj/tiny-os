@@ -1,8 +1,8 @@
 ; 启动汇编代码
 ; TAB=4
-DSKCAC0	EQU		0x00008000		; 磁盘缓存的位置（实模式）, 位于系统保留区
-DSKCAC	EQU		0x00100000		; 磁盘缓存的位置，位于磁盘缓存区
-BOTPAK	EQU		0x00280000		; 加载bootpack，位于内核区
+
+; 从Makefile传入的内存布局配置（无默认值，必须由Makefile提供）
+; 直接使用Makefile传入的常量，无需重新定义
 
 ; BOOT_INFO相关
 CYLS	EQU		0x0ff0			; 引导扇区设置
@@ -11,8 +11,9 @@ VMODE	EQU		0x0ff2			; 关于颜色的信息
 SCRNX	EQU		0x0ff4			; 分辨率X
 SCRNY	EQU		0x0ff6			; 分辨率Y
 VRAM	EQU		0x0ff8			; 图像缓冲区的起始地址
+
         %ifdef BIN
-		ORG		0x8200			; 声明这个程序要被装载的内存地址（实际决定不了），汇编器基于此生成正确的标签地址
+		ORG		ASMHEAD_ADDR	; 声明这个程序要被装载的内存地址（来自Makefile）
         %endif
 asmhead_start:
 ; 显示进入asmhead消息
@@ -20,36 +21,36 @@ asmhead_start:
 		CALL	putstr_16
 
 ; 设置画面模式
-		MOV		AL,0x13			; VGA显卡，320x200x8位
+		MOV		AL,VGA_MODE	; VGA显卡模式（从Makefile传入）
 		MOV		AH,0x00
 		INT		0x10
-		MOV		BYTE [VMODE],8	; 屏幕的模式（参考C语言的引用）
-		MOV		WORD [SCRNX],320
-		MOV		WORD [SCRNY],200
-		MOV		DWORD [VRAM],0x000a0000
+		MOV		BYTE [VMODE],SCREEN_COLORS	; 屏幕的模式（参考C语言的引用）
+		MOV		WORD [SCRNX],SCREEN_WIDTH
+		MOV		WORD [SCRNY],SCREEN_HEIGHT
+		MOV		DWORD [VRAM],VRAM_ADDR
 
 ; 显示VGA设置完成消息
 		MOV		SI,msg_vga
 		CALL	putstr_16
 
 ; 在实模式下测试VGA显存访问 - 画一条明显的白线
-		MOV		AX, 0xa000          ; VGA显存段地址
+		MOV		AX, VRAM_ADDR >> 4  ; VGA显存段地址
 		MOV		ES, AX
 		MOV		DI, 0               ; 偏移地址0
 		MOV		AL, 15              ; 白色（最亮）
-		MOV		CX, 320             ; 填充整个第一行（320像素）
+		MOV		CX, SCREEN_WIDTH        ; 填充整个第一行
 		CLD
 		REP		STOSB               ; 重复存储字节
 
 ; 再画几条彩色线测试
-		MOV		DI, 320             ; 第二行
+		MOV		DI, SCREEN_WIDTH        ; 第二行
 		MOV		AL, 4               ; 红色
-		MOV		CX, 320
+		MOV		CX, SCREEN_WIDTH
 		REP		STOSB
 
-		MOV		DI, 640             ; 第三行
+		MOV		DI, SCREEN_WIDTH*2      ; 第三行
 		MOV		AL, 2               ; 绿色
-		MOV		CX, 320
+		MOV		CX, SCREEN_WIDTH
 		REP		STOSB
 
 ; 显示实模式VGA测试完成
@@ -103,13 +104,13 @@ pipelineflush:
 		MOV		SS,AX
 ; 传输磁盘数据
 ; 从引导区开始
-        MOV		ESI,0x7c00		; 源
-        MOV		EDI,DSKCAC		; 目标
+        MOV		ESI,IPL_ADDR		; 源
+        MOV		EDI,DSKCAC_ADDR		; 目标
         MOV		ECX,512/4
         CALL	memcpy
 ; 剩余的全部
-        MOV		ESI,DSKCAC0+512 ; 源
-        MOV		EDI,DSKCAC+512  ; 目标
+        MOV		ESI,DSKCAC0_ADDR+512 ; 源
+        MOV		EDI,DSKCAC_ADDR+512  ; 目标
         MOV     ECX,0
         MOV     CL, BYTE [CYLS] ; 柱面数
         IMUL    ECX, 512*18*2/4 ; 柱面数*每柱面18扇区*每扇区512字节/4字节
@@ -118,18 +119,19 @@ pipelineflush:
 ; 由于还需要asmhead才能完成其余的bootpack任务
 ; bootpack启动, 复制到内核区
         MOV     ESI,bootpack        ; 源：bootpack的位置
-        MOV     EDI,BOTPAK         ; 目标：bootpack应该运行的地址
-        MOV     ECX,32768/4        ; 复制32KB（bootpack.bin的固定大小）
+        MOV     EDI,BOOTPACK_ADDR         ; 目标：bootpack应该运行的地址
+        MOV     ECX,BOOTPACK_SIZE/4        ; 复制32KB（bootpack.bin的固定大小）
         CALL    memcpy             ; 复制到指定位置
-		MOV     ESP,0x00310000     ; 设置堆栈
+		MOV     ESP,STACK_ADDR     ; 设置堆栈
+        ; TODO: 这个Magic Number 还没想好该怎么弄
         JMP     DWORD 2*8:0x0000   ; 远跳转到内核区（段基址0x280000+偏移0）
 
 ; 如果C代码返回，画紫色标记
 return_mark:
-		MOV		EBX, 0xa0000
-		ADD		EBX, 6400           ; 第20行
+		MOV		EBX, VRAM_ADDR
+		ADD		EBX, SCREEN_WIDTH*20    ; 第20行
 		MOV		AL, 5               ; 紫色
-		MOV		ECX, 320
+		MOV		ECX, SCREEN_WIDTH
 return_loop:
 		MOV		[EBX], AL
 		INC		EBX

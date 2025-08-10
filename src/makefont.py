@@ -132,7 +132,7 @@ __font:
         self.font_nas_file += f"; 字体定义结束，共 {self.char_num} 个字符\n"
         return self.font_nas_file
 
-def gen_font_nas_file(font_txt_file_path:str):
+def gen_font_nas_file(font_txt_file_path:str, output_path:str = 'build/font.nas'):
 
     # 检查文件是否存在
     if not os.path.exists(font_txt_file_path):
@@ -146,14 +146,19 @@ def gen_font_nas_file(font_txt_file_path:str):
         if not line:
             continue
         sm.transition(line)
-    with open('build/font.nas', 'w') as f:
+
+    # 确保输出目录存在
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    with open(output_path, 'w') as f:
         f.write(sm.get_font_nas_file())
 
 if __name__ == '__main__':
-    # 调用方式 python makefont.py $<font_path>
+    # 调用方式 python makefont.py <font_path> [output_path]
     import sys
-    if len(sys.argv) != 2:
-        print("Usage: python makefont.py <font_path>")
+    if len(sys.argv) < 2 or len(sys.argv) > 3:
+        print("Usage: python makefont.py <font_path> [output_path]")
     else:
-        gen_font_nas_file(sys.argv[1])
-        print(f"Font NAS file generated at build/font.nas")
+        output_path = sys.argv[2] if len(sys.argv) == 3 else 'build/font.nas'
+        gen_font_nas_file(sys.argv[1], output_path)
+        print(f"Font NAS file generated at {output_path}")
