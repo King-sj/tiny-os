@@ -35,7 +35,10 @@ int io_load_eflags(void);
 void io_store_eflags(int eflags);
 // 毫秒级睡眠
 void sleep_ms(int milliseconds);
-
+// 加载全局描述符表寄存器
+void load_gdtr(int limit, int addr);
+// 加载中断描述符表寄存器
+void load_idtr(int limit, int addr);
 // sprintf 相关函数
 void tiny_sprintf_d(char* buffer, const char* format, int value);
 void tiny_sprintf_x(char* buffer, const char* format, int value);
@@ -65,31 +68,43 @@ struct BOOTINFO {
     short scrnx, scrny;
     char *vram;
 };
+
+/* 段描述符 */
+struct SEGMENT_DESCRIPTOR {
+	short limit_low, base_low;
+	char base_mid, access_right;
+	char limit_high, base_high;
+};
+
+/* 中断门描述符 */
+struct GATE_DESCRIPTOR {
+	short offset_low, selector;
+	char dw_count, access_right;
+	short offset_high;
+};
 // 函数声明
 void init_palette(void);
+void init_gdtidt(void);
+void set_segmdesc(struct SEGMENT_DESCRIPTOR *sd, unsigned int limit, int base, int ar);
+void set_gatedesc(struct GATE_DESCRIPTOR *gd, int offset, int selector, int ar);
 void set_palette(int start, int end, unsigned char *rgb);
 void boxfill8(unsigned char *vram, int xsize, unsigned char c, int x0, int y0, int x1, int y1);
 void init_screen(char *vram, int x, int y);
 void putfont8(unsigned char *vram, int xsize, int x, int y, char c, const unsigned char *font);
 void putfonts8_asc(unsigned char *vram, int xsize, int x, int y, char c, unsigned char *s);
-void test_new_functions(void);
-void show_char_ascii(unsigned char *vram, int xsize, int x, int y, char color, char ch);
+void init_mouse_cursor8(char *mouse, char bc);
+void putblock8_8(char *vram, int vxsize, int pxsize, int pysize, int px0, int py0, char *buf, int bxsize);
 /* C代码主函数 */
 extern const char __font[16 * 256]; // 声明全局字体数组
 void HariMain(void)
 {
     struct BOOTINFO *binfo = (struct BOOTINFO *) 0x0ff0;
+    char mcursor[256];
     char s[40];
-
+    init_gdtidt(); // 初始化全局描述符表和中断描述符表
     init_palette(); /* 设定调色板 */
     init_screen(binfo->vram, binfo->scrnx, binfo->scrny);
-
-    // 显示基本字符集测试
-    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, (unsigned char*)"123456789");
-    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 32, COL8_FFFFFF, (unsigned char*)"ABCDEFGHIJKLMNOPQRSTUVWXYZ");
-    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 48, COL8_FFFFFF, (unsigned char*)"abcdefghijklmnopqrstuvwxyz");
-    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 64, COL8_FFFFFF, (unsigned char*)" !@#$%^&*()_+[]{}");
-    sleep_ms(1000); // 睡眠1秒，便于观察
+    init_mouse_cursor8(mcursor, COL8_008484);
 
     // 显示系统信息
     init_screen(binfo->vram, binfo->scrnx, binfo->scrny);  // clear screen
@@ -101,10 +116,12 @@ void HariMain(void)
 
     tiny_sprintf_d(s, "CYLINDERS: %d", binfo->cyls);
     putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 112, COL8_FFFFFF, (unsigned char*)s);
-    sleep_ms(1000); // 睡眠1秒，便于观察
+    sleep_ms(1000);
     init_screen(binfo->vram, binfo->scrnx, binfo->scrny);  // clear screen
-    test_new_functions();
-
+    /* 显示鼠标 */
+	int mx = (binfo->scrnx - 16) / 2; /* 计算画面的中心坐标*/
+	int my = (binfo->scrny - 28 - 16) / 2;
+    putblock8_8(binfo->vram, binfo->scrnx, 16, 16, mx, my, mcursor, 16);
     // 成功！进入无限循环，防止返回到汇编代码
     while(1) {
         io_hlt();  // CPU休眠，节省电力
@@ -209,32 +226,92 @@ void putfonts8_asc(unsigned char *vram, int xsize, int x, int y, char c, unsigne
     return;
 }
 
-// 测试 sleep 和 sprintf 功能
-void test_new_functions() {
-    char test_buffer[128];
+// 鼠标指针初始化
+void init_mouse_cursor8(char *mouse, char bc) {
+static char cursor[16][16] = {
+		"**************..",
+		"*OOOOOOOOOOO*...",
+		"*OOOOOOOOOO*....",
+		"*OOOOOOOOO*.....",
+		"*OOOOOOOO*......",
+		"*OOOOOOO*.......",
+		"*OOOOOOO*.......",
+		"*OOOOOOOO*......",
+		"*OOOO**OOO*.....",
+		"*OOO*..*OOO*....",
+		"*OO*....*OOO*...",
+		"*O*......*OOO*..",
+		"**........*OOO*.",
+		"*..........*OOO*",
+		"............*OO*",
+		".............***"
+	};
+	int x, y;
 
-    // 测试 sprintf 功能
-    tiny_sprintf_d(test_buffer, "NUMBER: %d", 42);
-    putfonts8_asc((unsigned char*)0xa0000, 320, 10, 100, COL8_FFFFFF, (unsigned char*)test_buffer);
-
-    sleep_ms(1000);  // 睡眠1秒
-
-    tiny_sprintf_x(test_buffer, "HEX: 0X%x", 255);
-    putfonts8_asc((unsigned char*)0xa0000, 320, 10, 120, COL8_FFFFFF, (unsigned char*)test_buffer);
-
-    sleep_ms(1000);  // 再睡眠1秒
-
-    tiny_sprintf_s(test_buffer, "STRING: %s", "WELCOME TO TINY OS!");
-    putfonts8_asc((unsigned char*)0xa0000, 320, 10, 140, COL8_FFFFFF, (unsigned char*)test_buffer);
+	for (y = 0; y < 16; y++) {
+		for (x = 0; x < 16; x++) {
+			if (cursor[y][x] == '*') {
+				mouse[y * 16 + x] = COL8_000000;
+			}
+			if (cursor[y][x] == 'O') {
+				mouse[y * 16 + x] = COL8_FFFFFF;
+			}
+			if (cursor[y][x] == '.') {
+				mouse[y * 16 + x] = bc;
+			}
+		}
+	}
+	return;
 }
-void show_char_ascii(unsigned char *vram, int xsize, int x, int y, char color, char ch) {
-    char s[40];
-    int code[16];
-    char c = 'a';
-    for (int i = 0; i < 16; i++) {
-        code[i] = *(__font + '0' * 16 + i);
-        tiny_sprintf_d(s, "0X%d ", code[i]);
-        putfonts8_asc(vram, xsize, 40*(i%8), 16*(i/8), COL8_FFFFFF, s);
-        sleep_ms(1000);
+
+// 绘制块图像
+void putblock8_8(char *vram, int vxsize, int pxsize, int pysize, int px0, int py0, char *buf, int bxsize) {
+    int x, y;
+    for (y = 0; y < pysize; y++) {
+        for (x = 0; x < pxsize; x++) {
+            vram[(py0 + y) * vxsize + (px0 + x)] = buf[y * bxsize + x];
+        }
     }
+}
+
+// 初始化全局描述符表和中断描述符表
+void init_gdtidt(void) {
+    // TODO: 去除magic number
+    struct SEGMENT_DESCRIPTOR *gdt = (struct SEGMENT_DESCRIPTOR *) 0x00270000;
+	struct GATE_DESCRIPTOR    *idt = (struct GATE_DESCRIPTOR    *) 0x0026f800;
+    for (int i = 0; i < 8192; i++) {
+        set_segmdesc(gdt + i, 0, 0, 0); // 清空GDT
+    }
+    set_segmdesc(gdt + 1, 0xffffffff, 0x00000000, 0x4092); // 设置代码段
+    set_segmdesc(gdt + 2, 0x0007ffff, 0x00280000, 0x409a); // 设置数据段
+    load_gdtr(0xffff, 0x00270000); // 加载GDT
+    // 初始化IDT
+    for (int i = 0; i < 256; i++) {
+        set_gatedesc(idt + i, 0, 0, 0);
+    }
+    load_idtr(0x7ff, 0x0026f800); // 加载IDT
+}
+
+// 设置段描述符
+void set_segmdesc(struct SEGMENT_DESCRIPTOR *sd, unsigned int limit, int base, int ar) {
+	if (limit > 0xfffff) {
+		ar |= 0x8000; /* G_bit = 1 */
+		limit /= 0x1000;
+	}
+	sd->limit_low = limit & 0xffff;
+	sd->base_low = base & 0xffff;
+	sd->base_mid = (base >> 16) & 0xff;
+	sd->access_right = ar & 0xff;
+	sd->limit_high = (limit >> 16) & 0x0f;
+	sd->base_high = (base >> 24) & 0xff;
+}
+
+// 设置中断门描述符
+void set_gatedesc(struct GATE_DESCRIPTOR *gd, int offset, int selector, int ar) {
+	gd->offset_low   = offset & 0xffff;
+	gd->selector     = selector;
+	gd->dw_count     = (ar >> 8) & 0xff;
+	gd->access_right = ar & 0xff;
+	gd->offset_high  = (offset >> 16) & 0xffff;
+	return;
 }

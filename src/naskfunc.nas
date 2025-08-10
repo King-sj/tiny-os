@@ -19,6 +19,8 @@ GLOBAL io_out32
 GLOBAL io_load_eflags
 GLOBAL io_store_eflags
 GLOBAL sleep_ms
+GLOBAL load_gdtr
+GLOBAL load_idtr
 
 ; void io_hlt(void); - CPU休眠
 io_hlt:
@@ -105,9 +107,25 @@ sleep_ms:
     ; 这里假设1ms大约需要循环1000000次（需要校准）
     IMUL    ECX,1000000     ; 每毫秒循环次数
 
+; 忙等待循环
 sleep_loop:
     DEC     ECX
     JNZ     sleep_loop
 
+; 完成睡眠
 sleep_done:
     RET
+
+; void load_gdtr(int limit, int addr); - 加载全局描述符表寄存器
+load_gdtr:
+    MOV     AX,[ESP+4]      ; 获取limit
+    MOV     EDX,[ESP+8]     ; 获取addr
+    LGDT    [EDX]           ; 加载GDT
+    RET
+
+; void load_idtr(int limit, int addr); - 加载中断描述符表寄存器
+load_idtr:
+		MOV		AX,[ESP+4]		; limit
+		MOV		[ESP+6],AX
+		LIDT	[ESP+6]
+		RET
