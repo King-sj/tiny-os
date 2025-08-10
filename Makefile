@@ -83,7 +83,7 @@ ASM_BIN_TARGETS := ipl asmhead
 ASM_OBJ_TARGETS := naskfunc sprintf_asm
 
 # C源文件
-C_SOURCES := bootpack sprintf
+C_SOURCES := bootpack sprintf graphic dsctbl
 C_OBJECTS := $(addprefix $(BUILD_DIR)/, $(addsuffix .o, $(C_SOURCES)))
 
 # 生成的文件
