@@ -4,7 +4,7 @@
 #include "naskfunc.h"
 #include "graphic.h"
 #include "dsctbl.h"
-
+#include "sprintf.h"
 /* 引导信息结构体 */
 struct BOOTINFO {
     char cyls, leds, vmode, reserve;

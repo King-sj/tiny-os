@@ -21,20 +21,39 @@ void HariMain(void)
 
     // 显示系统信息
     init_screen(binfo->vram, binfo->scrnx, binfo->scrny);  // clear screen
-    tiny_sprintf_d(s, "SCREEN WIDTH: %d", binfo->scrnx);
+    sprintf(s, "SCREEN WIDTH: %d", binfo->scrnx);
+    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 0, COL8_FFFFFF, (unsigned char*)s);
+
+    sprintf(s, "SCREEN HEIGHT: %d", binfo->scrny);
+    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, (unsigned char*)s);
+
+    sprintf(s, "CYLINDERS: %d", binfo->cyls);
+    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 32, COL8_FFFFFF, (unsigned char*)s);
+
+    // 测试新的sprintf功能
+    sprintf(s, "TEST: %d + %d = %d", 10, 20, 30);
+    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 48, COL8_FFFFFF, (unsigned char*)s);
+
+    sprintf(s, "HEX: 0x%x, UPPER: 0x%X", 255, 255);
+    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 64, COL8_FFFFFF, (unsigned char*)s);
+
+    sprintf(s, "CHAR: %c, STRING: %s", 'A', "Hello");
     putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 80, COL8_FFFFFF, (unsigned char*)s);
 
-    tiny_sprintf_d(s, "SCREEN HEIGHT: %d", binfo->scrny);
+    // 测试新增功能
+    sprintf(s, "OCT: %o, UNSIGNED: %u", 64, 4294967295U);
     putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 96, COL8_FFFFFF, (unsigned char*)s);
 
-    tiny_sprintf_d(s, "CYLINDERS: %d", binfo->cyls);
+    sprintf(s, "PTR: %p, PERCENT: 100%%", (void*)0x280000);
     putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 112, COL8_FFFFFF, (unsigned char*)s);
-    sleep_ms(1000);
+
+    sleep_ms(10000);
     init_screen(binfo->vram, binfo->scrnx, binfo->scrny);  // clear screen
     /* 显示鼠标 */
 	int mx = (binfo->scrnx - 16) / 2; /* 计算画面的中心坐标*/
 	int my = (binfo->scrny - 28 - 16) / 2;
     putblock8_8(binfo->vram, binfo->scrnx, 16, 16, mx, my, mcursor, 16);
+
     // 成功！进入无限循环，防止返回到汇编代码
     while(1) {
         io_hlt();  // CPU休眠，节省电力

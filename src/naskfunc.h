@@ -31,9 +31,5 @@ void sleep_ms(int milliseconds);
 void load_gdtr(int limit, int addr);
 // 加载中断描述符表寄存器
 void load_idtr(int limit, int addr);
-// sprintf 相关函数
-void tiny_sprintf_d(char* buffer, const char* format, int value);
-void tiny_sprintf_x(char* buffer, const char* format, int value);
-void tiny_sprintf_s(char* buffer, const char* format, const char* str_value);
 
 #endif
