@@ -1,6 +1,8 @@
 /* 汇编入口点 - 必须在最前面 */
 __asm__(
+    ".global _start\n"
     ".global bootpack\n"
+    "_start:\n"
     "bootpack:\n"
     "    call HariMain\n"
     "    ret\n"
@@ -68,7 +70,7 @@ void init_palette(void);
 void set_palette(int start, int end, unsigned char *rgb);
 void boxfill8(unsigned char *vram, int xsize, unsigned char c, int x0, int y0, int x1, int y1);
 void init_screen(char *vram, int x, int y);
-void putfont8(unsigned char *vram, int xsize, int x, int y, char c, unsigned char *font);
+void putfont8(unsigned char *vram, int xsize, int x, int y, char c, const unsigned char *font);
 void putfonts8_asc(unsigned char *vram, int xsize, int x, int y, char c, unsigned char *s);
 void test_new_functions(void);
 void show_char_ascii(unsigned char *vram, int xsize, int x, int y, char color, char ch);
@@ -78,27 +80,31 @@ void HariMain(void)
 {
     struct BOOTINFO *binfo = (struct BOOTINFO *) 0x0ff0;
     char s[40];
+
     init_palette(); /* 设定调色板 */
     init_screen(binfo->vram, binfo->scrnx, binfo->scrny);
-    // putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 0, COL8_FFFFFF, (unsigned char*)"HELLO OS!");
-    // sleep_ms(3000);
-    // init_screen(binfo->vram, binfo->scrnx, binfo->scrny); // 清屏
-    // tiny_sprintf_d(s, "WIDTH: %d", binfo->scrnx);
-    // putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 0, COL8_FFFFFF, (unsigned char*)s);
-    // sleep_ms(1000);
-    // tiny_sprintf_d(s, "HEIGHT: %d", binfo->scrny);
-    // putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 32, COL8_FFFFFF, (unsigned char*)s);
-    // sleep_ms(3000);
-    // init_screen(binfo->vram, binfo->scrnx, binfo->scrny); // 清屏
-    // Test显示ASCII字符
-    // show_char_ascii((unsigned char*)binfo->vram, binfo->scrnx, 0, 0, COL8_FFFFFF, 'Z');
 
+    // 显示基本字符集测试
     putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 16, COL8_FFFFFF, (unsigned char*)"123456789");
     putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 32, COL8_FFFFFF, (unsigned char*)"ABCDEFGHIJKLMNOPQRSTUVWXYZ");
     putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 48, COL8_FFFFFF, (unsigned char*)"abcdefghijklmnopqrstuvwxyz");
     putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 64, COL8_FFFFFF, (unsigned char*)" !@#$%^&*()_+[]{}");
+    sleep_ms(1000); // 睡眠1秒，便于观察
 
+    // 显示系统信息
+    init_screen(binfo->vram, binfo->scrnx, binfo->scrny);  // clear screen
+    tiny_sprintf_d(s, "SCREEN WIDTH: %d", binfo->scrnx);
+    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 80, COL8_FFFFFF, (unsigned char*)s);
+
+    tiny_sprintf_d(s, "SCREEN HEIGHT: %d", binfo->scrny);
+    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 96, COL8_FFFFFF, (unsigned char*)s);
+
+    tiny_sprintf_d(s, "CYLINDERS: %d", binfo->cyls);
+    putfonts8_asc((unsigned char*)binfo->vram, binfo->scrnx, 0, 112, COL8_FFFFFF, (unsigned char*)s);
+    sleep_ms(1000); // 睡眠1秒，便于观察
+    init_screen(binfo->vram, binfo->scrnx, binfo->scrny);  // clear screen
     test_new_functions();
+
     // 成功！进入无限循环，防止返回到汇编代码
     while(1) {
         io_hlt();  // CPU休眠，节省电力
@@ -173,7 +179,7 @@ void init_screen(char *vram, int x, int y)
 	return;
 }
 // 在屏幕上绘制一个字符 - 添加边界检查
-void putfont8(unsigned char *vram, int xsize, int x, int y, char c, unsigned char *font) {
+void putfont8(unsigned char *vram, int xsize, int x, int y, char c, const unsigned char *font) {
     // 边界检查：确保字体完全在屏幕范围内
     if (x < 0 || y < 0 || x + 8 > xsize || y + 16 > 200) {
         return; // 超出边界则不绘制

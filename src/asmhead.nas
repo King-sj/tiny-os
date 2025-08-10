@@ -1,9 +1,8 @@
 ; 启动汇编代码
 ; TAB=4
-
-BOTPAK	EQU		0x00280000		; 加载bootpack
-DSKCAC	EQU		0x00100000		; 磁盘缓存的位置
-DSKCAC0	EQU		0x00008000		; 磁盘缓存的位置（实模式）
+DSKCAC0	EQU		0x00008000		; 磁盘缓存的位置（实模式）, 位于系统保留区
+DSKCAC	EQU		0x00100000		; 磁盘缓存的位置，位于磁盘缓存区
+BOTPAK	EQU		0x00280000		; 加载bootpack，位于内核区
 
 ; BOOT_INFO相关
 CYLS	EQU		0x0ff0			; 引导扇区设置
@@ -12,15 +11,15 @@ VMODE	EQU		0x0ff2			; 关于颜色的信息
 SCRNX	EQU		0x0ff4			; 分辨率X
 SCRNY	EQU		0x0ff6			; 分辨率Y
 VRAM	EQU		0x0ff8			; 图像缓冲区的起始地址
-
+        %ifdef BIN
 		ORG		0x8200			; 声明这个程序要被装载的内存地址（实际决定不了），汇编器基于此生成正确的标签地址
-
+        %endif
+asmhead_start:
 ; 显示进入asmhead消息
 		MOV		SI,msg_asmhead
 		CALL	putstr_16
 
 ; 设置画面模式
-
 		MOV		AL,0x13			; VGA显卡，320x200x8位
 		MOV		AH,0x00
 		INT		0x10
@@ -102,10 +101,28 @@ pipelineflush:
 		MOV		FS,AX
 		MOV		GS,AX
 		MOV		SS,AX
-
-; asmhead.bin固定为512字节，bootpack.bin从0x8200 + 512开始
-		MOV		ESP,0x00310000      ; 设置堆栈
-        JMP         DWORD 2*8:bootpack  ; 远跳转到C代码
+; 传输磁盘数据
+; 从引导区开始
+        MOV		ESI,0x7c00		; 源
+        MOV		EDI,DSKCAC		; 目标
+        MOV		ECX,512/4
+        CALL	memcpy
+; 剩余的全部
+        MOV		ESI,DSKCAC0+512 ; 源
+        MOV		EDI,DSKCAC+512  ; 目标
+        MOV     ECX,0
+        MOV     CL, BYTE [CYLS] ; 柱面数
+        IMUL    ECX, 512*18*2/4 ; 柱面数*每柱面18扇区*每扇区512字节/4字节
+        SUB     ECX, 512/4    ; 减去已经复制的512字节
+        CALL    memcpy
+; 由于还需要asmhead才能完成其余的bootpack任务
+; bootpack启动, 复制到内核区
+        MOV     ESI,bootpack        ; 源：bootpack的位置
+        MOV     EDI,BOTPAK         ; 目标：bootpack应该运行的地址
+        MOV     ECX,32768/4        ; 复制32KB（bootpack.bin的固定大小）
+        CALL    memcpy             ; 复制到指定位置
+		MOV     ESP,0x00310000     ; 设置堆栈
+        JMP     DWORD 2*8:0x0000   ; 远跳转到内核区（段基址0x280000+偏移0）
 
 ; 如果C代码返回，画紫色标记
 return_mark:
@@ -133,8 +150,8 @@ waitkbdout:
 
 ; 16位模式下的字符串输出函数
 putstr_16:
-		MOV		AL,[SI]
-		ADD		SI,1
+		MOV		AL,[SI]		; 在16位模式下：67 8A 04
+		ADD		SI,1		; 在16位模式下：66 83 C6 01
 		CMP		AL,0
 		JE		putstr_16_end
 		MOV		AH,0x0e			; 显示字符
@@ -154,16 +171,18 @@ memcpy:
 		RET
 ; memcpy地址前缀大小
 
-		TIMES	(16 - ($ - $$) % 16) % 16 DB 0
+		ALIGNB	16
 GDT0:
 		TIMES	8 DB 0				; 初始值（空描述符）
 		DW		0xffff,0x0000,0x9200,0x00cf	; 数据段描述符
-		DW		0xffff,0x0000,0x9a00,0x00cf	; 代码段描述符
+		DW		0xffff,0x0000,0x9a28,0x0047	; 代码段描述符（基址0x00280000）
 
 		DW		0
 GDTR0:
 		DW		8*3-1
 		DD		GDT0
+
+        ALIGNB	16
 
 ; 调试消息
 msg_asmhead:
