@@ -4,12 +4,7 @@
 #include "naskfunc.h"
 #include "graphic.h"
 #include "dsctbl.h"
+#include "asmhead.h"
+#include "int.h"
 #include "sprintf.h"
-/* 引导信息结构体 */
-struct BOOTINFO {
-    char cyls, leds, vmode, reserve;
-    short scrnx, scrny;
-    char *vram;
-};
-
 #endif

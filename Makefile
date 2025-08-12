@@ -38,6 +38,7 @@ SCREEN_COLORS := 8            # 屏幕颜色位数：8位（256色）
 BUILD_DIR := build
 SRC_DIR := src
 STATIC_DIR := static
+SCRIPTS_DIR := scripts
 
 # ==== 计算的参数 ====
 # 基于上述配置自动计算的参数
@@ -83,7 +84,7 @@ ASM_BIN_TARGETS := ipl asmhead
 ASM_OBJ_TARGETS := naskfunc sprintf_asm
 
 # C源文件
-C_SOURCES := bootpack sprintf graphic dsctbl
+C_SOURCES := bootpack sprintf graphic dsctbl int
 C_OBJECTS := $(addprefix $(BUILD_DIR)/, $(addsuffix .o, $(C_SOURCES)))
 
 # 生成的文件
@@ -124,7 +125,7 @@ $(BUILD_DIR)/asmhead.elf: $(SRC_DIR)/asmhead.nas Makefile | $(BUILD_DIR)
 
 # 字体处理
 $(BUILD_DIR)/font.nas: $(STATIC_DIR)/font/font.txt Makefile | $(BUILD_DIR)
-	$(PYTHON) $(SRC_DIR)/makefont.py $< $@
+	$(PYTHON) $(SCRIPTS_DIR)/makefont.py $< $@
 
 $(BUILD_DIR)/font.o: $(BUILD_DIR)/font.nas Makefile
 	$(ASM) $(ASMFLAGS_ELF) $< -o $@
@@ -180,22 +181,101 @@ $(eval $(call run_variant,486,-cpu 486))
 $(eval $(call run_variant,pentium,-cpu pentium))
 $(eval $(call run_variant,modern,-cpu Haswell))
 
+# 鼠标测试运行目标
+run-mouse-usb: img
+	$(QEMU_BASE) -usb -device usb-mouse
+
+run-mouse-gtk: img
+	$(QEMU_BASE) -display gtk,grab-on-hover=on
+
+run-mouse-vnc: img
+	@echo "启动VNC服务器，使用以下命令连接："
+	@echo "open vnc://localhost:5901"
+	$(QEMU_BASE) -vnc :1
+
+# 测试异常和crash处理
+test-crash: img
+	@echo "测试crash处理机制..."
+	@echo "启动后系统会显示完整的中断处理支持"
+	@echo "按键测试键盘中断，按Ctrl+C退出"
+	$(QEMU_BASE) -display gtk
+
+# 鼠标测试相关运行目标
+run-mouse-usb: img
+	$(QEMU_BASE) -usb -device usb-mouse
+
+run-mouse-gtk: img
+	$(QEMU_BASE) -display gtk,grab-on-hover=on
+
+run-mouse-vnc: img
+	@echo "启动VNC服务器，请在浏览器访问 vnc://localhost:5901"
+	$(QEMU_BASE) -vnc :1
+
 # ==== 调试目标 ====
 log: img
-	timeout 10 $(QEMU_BASE) -d cpu,int,exec -D debug.log -no-reboot -no-shutdown 2>&1 || true
+	$(QEMU_BASE) -d cpu,int,guest_errors -D debug-full.log -serial stdio
 
+# 增强的调试日志 - 捕获更多信息
+debug-log: img
+	$(QEMU_BASE) -d cpu,int,exec,unimp,guest_errors -D debug-full.log -serial stdio
+
+# 调试服务器 - 在crash时停止
 debug-server: img $(BUILD_DIR)/asmhead.elf
-	$(QEMU_BASE) -s -S
+	$(QEMU_BASE) -s -S -no-reboot -no-shutdown
+
+# 调试服务器 - 运行但在异常时停止
+debug-server-run: img $(BUILD_DIR)/asmhead.elf
+	$(QEMU_BASE) -s -no-reboot -no-shutdown
 
 debug-connect:
+	echo "调试kernel"
 	x86_64-elf-gdb -ex "file $(BUILD_DIR)/bootpack.elf" \
-				   -ex "add-symbol-file $(BUILD_DIR)/asmhead.elf $(ASMHEAD_ADDR)" \
+				   -ex "add-symbol-file $(BUILD_DIR)/bootpack.elf $(BOOTPACK_ADDR)" \
 	               -ex "target remote :1234" \
 	               -ex "set architecture $(ARCH)" \
 	               -ex "set disassembly-flavor intel" \
-	               -ex "break *$(IPL_ADDR)" \
-	               -ex "break HariMain" \
-	               -ex "display/10i \$$pc"
+	               -ex "break *$(BOOTPACK_ADDR)" \
+	               -ex "break asm_inthandler21" \
+	               -ex "break inthandler21" \
+	               -ex "display/10i \$$pc+$(BOOTPACK_ADDR)"
+
+# 增强的GDB连接 - 添加异常处理
+debug-connect-enhanced:
+	echo "增强调试kernel - 捕获异常"
+	x86_64-elf-gdb -ex "file $(BUILD_DIR)/bootpack.elf" \
+				   -ex "add-symbol-file $(BUILD_DIR)/bootpack.elf $(BOOTPACK_ADDR)" \
+	               -ex "target remote :1234" \
+	               -ex "set architecture $(ARCH)" \
+	               -ex "set disassembly-flavor intel" \
+	               -ex "break *$(BOOTPACK_ADDR)" \
+	               -ex "break asm_inthandler21" \
+	               -ex "break inthandler21" \
+	               -ex "catch signal SIGSEGV" \
+	               -ex "catch signal SIGILL" \
+	               -ex "set confirm off" \
+	               -ex "display/10i \$$pc" \
+	               -ex "display/x \$$esp" \
+	               -ex "display/x \$$ebp"
+
+lldb-connect:
+	lldb -o "target create $(BUILD_DIR)/bootpack.elf" \
+	     -o "gdb-remote localhost:1234" \
+	     -o "settings set target.x86-disassembly-flavor intel" \
+	     -o "breakpoint set --address $(IPL_ADDR)" \
+	     -o "breakpoint set --name HariMain" \
+	     -o "process status" \
+	     -o "disassemble --pc --count 5"
+
+# LLDB完整连接（启动后手动加载符号）
+lldb-connect-full:
+	@echo "启动LLDB，连接后请手动执行以下命令加载asmhead符号："
+	@echo "target modules add $(BUILD_DIR)/asmhead.elf"
+	@echo "或者使用: image add $(BUILD_DIR)/asmhead.elf"
+	lldb -o "target create $(BUILD_DIR)/bootpack.elf" \
+	     -o "gdb-remote localhost:1234" \
+	     -o "settings set target.x86-disassembly-flavor intel" \
+	     -o "breakpoint set --address $(IPL_ADDR)" \
+	     -o "breakpoint set --name HariMain"
 
 # 16位模式调试连接（用于调试实模式部分）
 debug-connect-16:
@@ -220,9 +300,15 @@ help:
 	@echo "  clean         - 清理构建文件"
 	@echo ""
 	@echo "调试目标:"
-	@echo "  debug-server  - 启动调试服务器"
-	@echo "  debug-connect - 连接GDB调试器"
-	@echo "  log           - 生成执行日志"
+	@echo "  debug-server           - 启动调试服务器（暂停启动）"
+	@echo "  debug-server-run       - 启动调试服务器（直接运行）"
+	@echo "  debug-connect          - 连接GDB调试器"
+	@echo "  debug-connect-enhanced - 连接GDB调试器（增强版，捕获异常）"
+	@echo "  lldb-connect           - 连接LLDB调试器（快速）"
+	@echo "  lldb-connect-full      - 连接LLDB调试器（完整，需手动加载符号）"
+	@echo "  debug-connect-16       - 16位模式GDB调试"
+	@echo "  log                    - 生成执行日志"
+	@echo "  debug-log              - 生成增强调试日志"
 	@echo ""
 	@echo "运行变体:"
 	@echo "  run-info      - 显示CPU信息运行"
@@ -231,6 +317,23 @@ help:
 	@echo "  run-486       - 486 CPU运行"
 	@echo "  run-pentium   - Pentium CPU运行"
 	@echo "  run-modern    - 现代CPU运行"
+	@echo ""
+	@echo "鼠标测试运行目标:"
+	@echo "  run-mouse-usb - 使用USB鼠标模拟运行"
+	@echo "  run-mouse-gtk - 使用GTK显示和鼠标捕获运行"
+	@echo "  run-mouse-vnc - 使用VNC显示运行（端口5901）"
+	@echo ""
+	@echo "调试技巧:"
+	@echo "1. 键盘crash调试："
+	@echo "   make debug-server-run &"
+	@echo "   make debug-connect-enhanced"
+	@echo "   (gdb) c   # 继续运行，按键盘测试"
+	@echo ""
+	@echo "2. 捕获crash地址："
+	@echo "   make debug-log"
+	@echo "   查看debug-full.log文件"
 
-.PHONY: img run clean help debug-server debug-connect debug-connect-16 log \
-        run-info run-slow run-fast run-sync run-486 run-pentium run-modern
+.PHONY: img run clean help debug-server debug-server-run debug-connect debug-connect-enhanced debug-connect-16 log debug-log \
+        lldb-connect lldb-connect-full \
+        run-info run-slow run-fast run-sync run-486 run-pentium run-modern \
+        run-mouse-usb run-mouse-gtk run-mouse-vnc

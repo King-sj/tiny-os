@@ -3,20 +3,24 @@
 
 // 初始化全局描述符表和中断描述符表
 void init_gdtidt(void) {
-    // TODO: 去除magic number
-    struct SEGMENT_DESCRIPTOR *gdt = (struct SEGMENT_DESCRIPTOR *) 0x00270000;
-	struct GATE_DESCRIPTOR    *idt = (struct GATE_DESCRIPTOR    *) 0x0026f800;
-    for (int i = 0; i < 8192; i++) {
+    struct SEGMENT_DESCRIPTOR *gdt = (struct SEGMENT_DESCRIPTOR *) ADR_GDT;
+	struct GATE_DESCRIPTOR    *idt = (struct GATE_DESCRIPTOR    *) ADR_IDT;
+    for (int i = 0; i < LIMIT_GDT / 8; i++) {
         set_segmdesc(gdt + i, 0, 0, 0); // 清空GDT
     }
-    set_segmdesc(gdt + 1, 0xffffffff, 0x00000000, 0x4092); // 设置代码段
-    set_segmdesc(gdt + 2, 0x0007ffff, 0x00280000, 0x409a); // 设置数据段
-    load_gdtr(0xffff, 0x00270000); // 加载GDT
+    set_segmdesc(gdt + 1, 0xffffffff, 0x00000000, AR_DATA32_RW);
+    set_segmdesc(gdt + 2, LIMIT_BOTPAK, ADR_BOTPAK, AR_CODE32_ER);
+    load_gdtr(LIMIT_GDT, ADR_GDT); // 加载GDT
     // 初始化IDT
-    for (int i = 0; i < 256; i++) {
+    for (int i = 0; i < LIMIT_IDT / 8; i++) {
         set_gatedesc(idt + i, 0, 0, 0);
     }
-    load_idtr(0x7ff, 0x0026f800); // 加载IDT
+    load_idtr(LIMIT_IDT, ADR_IDT); // 加载IDT
+
+    // 设置IDT, 注册中断处理函数
+    set_gatedesc(idt + 0x21, (int) asm_inthandler21, 2 << 3, AR_INTGATE32);  // 2 << 3 表示选择第二个段, gdt+2
+	set_gatedesc(idt + 0x27, (int) asm_inthandler27, 2 << 3, AR_INTGATE32);
+	set_gatedesc(idt + 0x2c, (int) asm_inthandler2c, 2 << 3, AR_INTGATE32);
 }
 
 // 设置段描述符
@@ -25,12 +29,13 @@ void set_segmdesc(struct SEGMENT_DESCRIPTOR *sd, unsigned int limit, int base, i
 		ar |= 0x8000; /* G_bit = 1 */
 		limit /= 0x1000;
 	}
-	sd->limit_low = limit & 0xffff;
-	sd->base_low = base & 0xffff;
-	sd->base_mid = (base >> 16) & 0xff;
+	sd->limit_low    = limit & 0xffff;
+	sd->base_low     = base & 0xffff;
+	sd->base_mid     = (base >> 16) & 0xff;
 	sd->access_right = ar & 0xff;
-	sd->limit_high = (limit >> 16) & 0x0f;
-	sd->base_high = (base >> 24) & 0xff;
+	sd->limit_high   = ((limit >> 16) & 0x0f) | ((ar >> 8) & 0xf0);
+	sd->base_high    = (base >> 24) & 0xff;
+	return;
 }
 
 // 设置中断门描述符

@@ -336,3 +336,4 @@ make debug-connect
 - [0x86 实模式物理内存布局](https://www.cnblogs.com/HachikoT/p/16974147.html)
 - [VGA硬件编程](http://www.osdever.net/FreeVGA/vga/vga.htm)
 - [Intel 80386手册](https://css.csail.mit.edu/6.858/2014/readings/i386.pdf)
+- [段描述符与段选择子](https://www.cnblogs.com/wingsummer/p/15312627.html)

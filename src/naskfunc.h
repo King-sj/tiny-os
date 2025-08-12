@@ -31,5 +31,8 @@ void sleep_ms(int milliseconds);
 void load_gdtr(int limit, int addr);
 // 加载中断描述符表寄存器
 void load_idtr(int limit, int addr);
-
+// 远跳转到指定代码段和偏移地址
+void asm_inthandler21(void);
+void asm_inthandler27(void);
+void asm_inthandler2c(void);
 #endif
